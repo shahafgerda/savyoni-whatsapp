@@ -1,19 +1,24 @@
-"""FastAPI app: receives Green API webhooks, replies via the agent.
+"""FastAPI app: receives Green API webhooks, replies with a fixed message.
 
-Audience: this bot is 'public' (customer_service) - it answers anyone who
-writes in a private chat, and ignores group chats. It dedupes by Green API
-message id (survives Render restarts) and never answers its own messages.
+סביוני is a fixed auto-responder. Every private incoming message gets the
+same canned reply directing the sender to the school secretariat. No LLM is
+involved - the reply is deterministic, instant, and cannot hallucinate.
+
+Group chats are ignored. The bot never answers its own messages, and dedupes
+by Green API message id so a Render restart doesn't double-reply.
 """
 from fastapi import FastAPI, Request
 
 import database
-from agent import handle_message
 from config import GREEN_API_INSTANCE, SPEC
 from tools.whatsapp import send_reply
 
 app = FastAPI(title="WhatsApp Agent - סביוני")
 
 ANSWER_GROUPS = SPEC.get("audience", {}).get("answer_groups", False)
+
+# The single fixed reply this bot sends to every incoming message.
+AUTO_REPLY = SPEC["fixed_auto_reply"]["message"]
 
 
 @app.on_event("startup")
@@ -51,23 +56,9 @@ async def green_api_webhook(request: Request):
     if database.already_processed(id_message):
         return {"ignored": "duplicate"}
 
-    # Extract text.
-    message_data = body.get("messageData", {})
-    text = ""
-    if message_data.get("typeMessage") == "textMessage":
-        text = message_data.get("textMessageData", {}).get("textMessage", "")
-    elif message_data.get("typeMessage") == "extendedTextMessage":
-        text = message_data.get("extendedTextMessageData", {}).get("text", "")
-
-    if not text.strip():
-        database.mark_processed(id_message)
-        return {"ignored": "no text content"}
-
-    sender_phone = chat_id.replace("@c.us", "")
-    reply = handle_message(chat_id, sender_phone, text)
-
+    # Fixed auto-reply to every incoming message, regardless of content.
     try:
-        send_reply(chat_id, reply)
+        send_reply(chat_id, AUTO_REPLY)
     except Exception as exc:  # noqa: BLE001
         print(f"[main] failed to send reply: {exc}")
 
