@@ -6,6 +6,9 @@ involved - the reply is deterministic, instant, and cannot hallucinate.
 
 Group chats are ignored. The bot never answers its own messages, and dedupes
 by Green API message id so a Render restart doesn't double-reply.
+
+Verbose logging on every webhook so we can see exactly which decision the
+bot takes for each incoming message.
 """
 from fastapi import FastAPI, Request
 
@@ -35,7 +38,9 @@ def health():
 async def green_api_webhook(request: Request):
     body = await request.json()
 
-    if body.get("typeWebhook") != "incomingMessageReceived":
+    type_webhook = body.get("typeWebhook")
+    if type_webhook != "incomingMessageReceived":
+        print(f"[wh] skip: typeWebhook={type_webhook}")
         return {"ignored": "not an incoming message"}
 
     id_message = body.get("idMessage", "")
@@ -43,24 +48,31 @@ async def green_api_webhook(request: Request):
     chat_id = sender_data.get("chatId", "")
     sender = sender_data.get("sender", "")
 
+    is_group = chat_id.endswith("@g.us")
+    print(f"[wh] in id={id_message} chat={chat_id} group={is_group}")
+
     # Ignore group chats unless the spec opts in.
-    if chat_id.endswith("@g.us") and not ANSWER_GROUPS:
+    if is_group and not ANSWER_GROUPS:
         return {"ignored": "group chat"}
 
     # Never answer our own outgoing messages.
     own_jid = f"{GREEN_API_INSTANCE}@c.us"
     if sender == own_jid:
+        print(f"[wh] skip: own message ({sender})")
         return {"ignored": "own message"}
 
     # Dedup: Render replays the last webhook on restart.
     if database.already_processed(id_message):
+        print(f"[wh] skip: duplicate id={id_message}")
         return {"ignored": "duplicate"}
 
     # Fixed auto-reply to every incoming message, regardless of content.
+    print(f"[wh] REPLYING to {chat_id}")
     try:
-        send_reply(chat_id, AUTO_REPLY)
+        result = send_reply(chat_id, AUTO_REPLY)
+        print(f"[wh] send OK -> {result}")
     except Exception as exc:  # noqa: BLE001
-        print(f"[main] failed to send reply: {exc}")
+        print(f"[wh] send FAILED: {type(exc).__name__}: {exc}")
 
     database.mark_processed(id_message)
     return {"status": "handled"}
