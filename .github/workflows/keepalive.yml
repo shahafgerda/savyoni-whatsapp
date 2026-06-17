@@ -2,12 +2,13 @@ name: keep-alive
 
 # Pings the bot's /health endpoint so Render's free tier does not spin the
 # server down (it sleeps after ~15 min of no traffic). Runs every 5 minutes
-# during daytime hours (04:00–20:00 UTC ≈ 07:00–23:00 Israel), which covers
-# when parents actually message and keeps the free instance-hours budget safe.
+# during school hours (03:30–13:00 UTC ≈ 06:30–16:00 Israel summer time), so
+# the bot is warm and instant from 7:00 to 16:00. Outside this window it still
+# replies, just with a one-time ~30s wake-up on the first message.
 
 on:
   schedule:
-    - cron: "*/5 4-20 * * *"
+    - cron: "*/5 3-12 * * *"
   workflow_dispatch: {}
 
 jobs:
