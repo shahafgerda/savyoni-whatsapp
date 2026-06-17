@@ -1,0 +1,20 @@
+name: keep-alive
+
+# Pings the bot's /health endpoint so Render's free tier does not spin the
+# server down (it sleeps after ~15 min of no traffic). Runs every 5 minutes
+# during daytime hours (04:00–20:00 UTC ≈ 07:00–23:00 Israel), which covers
+# when parents actually message and keeps the free instance-hours budget safe.
+
+on:
+  schedule:
+    - cron: "*/5 4-20 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: |
+          echo "Pinging at $(date -u)"
+          curl -fsS --max-time 60 https://savyoni-whatsapp.onrender.com/health || echo "ping failed (server may be waking)"
